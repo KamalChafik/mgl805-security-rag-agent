@@ -1,0 +1,32 @@
+{
+  "@version": "2.17.0",
+  "@generated": "2026-01-01T00:00:00Z",
+  "site": [
+    {
+      "@name": "http://dvwa/",
+      "alerts": [
+        {
+          "name": "SQL Injection",
+          "riskcode": "3",
+          "confidence": "2",
+          "riskdesc": "High (Medium)",
+          "cweid": "89",
+          "desc": "<p>Example only</p>",
+          "solution": "<p>Use parameterized queries</p>",
+          "reference": "https://cheatsheetseries.owasp.org/",
+          "instances": [
+            {"uri": "http://dvwa/login.php", "method": "POST", "param": "username", "evidence": "synthetic", "otherinfo": "For unit tests only"}
+          ]
+        },
+        {
+          "name": "Missing Security Header",
+          "riskcode": "1",
+          "confidence": "2",
+          "riskdesc": "Low (Medium)",
+          "cweid": "693",
+          "instances": [{"uri": "http://dvwa/", "method": "GET", "param": ""}]
+        }
+      ]
+    }
+  ]
+}

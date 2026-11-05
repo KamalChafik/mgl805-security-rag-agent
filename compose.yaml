@@ -1,0 +1,142 @@
+# MGL805 lab: ONE Compose project for all Linux Docker services.
+# Ollama intentionally runs on a separate Windows RTX 3060, configured via OLLAMA_URL.
+# All exposed host ports bind to BIND_IP (default: loopback ONLY).
+name: mgl805-security-lab
+services:
+  open-webui:
+    image: ${OPENWEBUI_IMAGE:-ghcr.io/open-webui/open-webui:main}
+    container_name: mgl805-open-webui
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${WEBUI_PORT:-3000}:8080"
+    environment:
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Run ./start.sh to generate your secret}
+      OLLAMA_BASE_URL: ${OLLAMA_URL:?Set OLLAMA_URL in .env}
+      RAG_OLLAMA_BASE_URL: ${OLLAMA_URL:?Set OLLAMA_URL in .env}
+      ENABLE_OLLAMA_API: "true"
+      ENABLE_OPENAI_API: "false"
+      VECTOR_DB: chroma
+      CHROMA_HTTP_HOST: chromadb
+      CHROMA_HTTP_PORT: "8000"
+      RAG_EMBEDDING_ENGINE: ollama
+      RAG_EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      SECURITY_AGENT_URL: http://security-agent:8000
+      OWASP_COLLECTION_ID: ${KNOWLEDGE_ID:-}
+    volumes:
+      - ./data/openwebui:/app/backend/data
+    networks:
+      - backend
+    depends_on:
+      chromadb:
+        condition: service_healthy
+
+  chromadb:
+    image: ${CHROMA_IMAGE:-chromadb/chroma:1.5.3}
+    container_name: mgl805-chromadb
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /data
+    volumes:
+      - ./data/chroma:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 15s
+      timeout: 8s
+      retries: 12
+      start_period: 30s
+
+  security-agent:
+    build:
+      context: ./services/security-agent
+    image: mgl805/security-agent:local
+    container_name: mgl805-security-agent
+    restart: unless-stopped
+    environment:
+      REPORT_DIR: /reports
+      TARGET_URL: http://dvwa:80/
+    volumes:
+      - ./data/reports:/reports:ro
+    networks:
+      - backend
+      - lab
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    pids_limit: 128
+    mem_limit: 256m
+
+  zap:
+    image: ${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy:stable}
+    container_name: mgl805-zap
+    restart: unless-stopped
+    user: zap
+    stdin_open: true
+    command: ["zap-webswing.sh"]
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${ZAP_GUI_PORT:-8088}:8080"
+    environment:
+      ZAP_WEBSWING_OPTS: "-host 0.0.0.0 -port 8090"
+    volumes:
+      # ZAP's private CA files stay in data/zap, OUTSIDE FastAPI's read-only reports mount.
+      - ./data/zap:/zap/wrk:rw
+      # In ZAP's Report dialog, export JSON reports to /zap/wrk/reports/*.json.
+      - ./data/reports:/zap/wrk/reports:rw
+    networks:
+      - lab
+    # Intentionally DO NOT publish internal ZAP proxy/API port 8090.
+    # API control is NOT integrated in this read-only v1.
+
+  dvwa:
+    image: ${DVWA_IMAGE:-ghcr.io/digininja/dvwa:latest}
+    container_name: mgl805-dvwa
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${DVWA_PORT:-4280}:80"
+    environment:
+      DB_SERVER: db
+      DB_DATABASE: dvwa
+      DB_USER: dvwa
+      DB_PASSWORD: ${DB_PASSWORD:?Run ./start.sh to generate a password}
+      DEFAULT_SECURITY_LEVEL: low
+    networks:
+      - lab
+      - dbnet
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: ${MARIADB_IMAGE:-mariadb:10.11}
+    container_name: mgl805-dvwa-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Run ./start.sh to generate a root password}
+      MARIADB_DATABASE: dvwa
+      MARIADB_USER: dvwa
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Run ./start.sh to generate a password}
+    volumes:
+      - ./data/mariadb:/var/lib/mysql
+    networks:
+      - dbnet
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+networks:
+  backend:
+    driver: bridge
+  lab:
+    driver: bridge
+    internal: true
+  dbnet:
+    driver: bridge
+    internal: true
