@@ -1,6 +1,6 @@
-# MGL805 lab: ONE Compose project for all Linux Docker services.
-# Ollama intentionally runs on a separate Windows RTX 3060, configured via OLLAMA_URL.
-# All exposed host ports bind to BIND_IP (default: loopback ONLY).
+# MGL805 Security Lab - Docker Compose
+# Ollama runs on a separate machine, configured through OLLAMA_URL.
+# Published ports bind to BIND_IP (loopback by default).
 name: mgl805-security-lab
 services:
   open-webui:
@@ -42,7 +42,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v2/heartbeat"]
+      test: ["CMD", "/bin/bash", "-c", "echo > /dev/tcp/127.0.0.1/8000"]
       interval: 15s
       timeout: 8s
       retries: 12
@@ -83,14 +83,12 @@ services:
     environment:
       ZAP_WEBSWING_OPTS: "-host 0.0.0.0 -port 8090"
     volumes:
-      # ZAP's private CA files stay in data/zap, OUTSIDE FastAPI's read-only reports mount.
       - ./data/zap:/zap/wrk:rw
-      # In ZAP's Report dialog, export JSON reports to /zap/wrk/reports/*.json.
       - ./data/reports:/zap/wrk/reports:rw
     networks:
+      - access
       - lab
-    # Intentionally DO NOT publish internal ZAP proxy/API port 8090.
-    # API control is NOT integrated in this read-only v1.
+    # ZAP proxy/API port 8090 intentionally remains unpublished.
 
   dvwa:
     image: ${DVWA_IMAGE:-ghcr.io/digininja/dvwa:latest}
@@ -105,6 +103,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?Run ./start.sh to generate a password}
       DEFAULT_SECURITY_LEVEL: low
     networks:
+      - access
       - lab
       - dbnet
     depends_on:
@@ -133,6 +132,9 @@ services:
 
 networks:
   backend:
+    driver: bridge
+  access:
+    # Non-internal bridge used by services with ports published on the VM.
     driver: bridge
   lab:
     driver: bridge
