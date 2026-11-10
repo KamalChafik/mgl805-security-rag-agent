@@ -1,47 +1,47 @@
-# Operations / Troubleshooting
+# Exploitation et dépannage
 
-## Diagnosing 'Model qwen3.5:9b not found'
+## Erreur « Model qwen3.5:9b not found »
 
-This error may indicate Ollama is **unreachable**, not that the model is absent. On Windows run `ollama list` and `ollama ps`, then `curl.exe http://127.0.0.1:11434/api/tags`. On the Linux VM run `curl --max-time 8 http://WINDOWS_IP:11434/api/tags`. Inside Open WebUI, `./scripts/check_stack.sh` tests the configured endpoint. Verify actual Windows IPv4 address, `OLLAMA_HOST` binding, Windows Firewall scope, routes, and `.env` `OLLAMA_URL`. The bridge inherits the same URL through container environment.
+Ce message peut signifier qu'Ollama est **inaccessible**, et non que le modèle est absent. Sur Windows, exécutez `ollama list`, `ollama ps`, puis `curl.exe http://127.0.0.1:11434/api/tags`. Sur la VM Linux, essayez `curl --max-time 8 http://WINDOWS_IP:11434/api/tags`. Depuis l'environnement Open WebUI, `./scripts/check_stack.sh` vérifie la connexion configurée. Vérifiez l'adresse IPv4 actuelle du PC Windows, l'interface d'écoute définie par `OLLAMA_HOST`, les règles du Pare-feu Windows, les routes et la valeur `OLLAMA_URL` de `.env`. Le pont réutilise cette URL grâce aux variables d'environnement du conteneur.
 
-## Open WebUI custom tool says no tools found
+## L'outil personnalisé d'Open WebUI affiche « No tools found »
 
-Use the Python **Workspace Tool** in `openwebui/tools/owasp_report_bridge.py`; this was verified to work in our lab even when an external OpenAPI server tool showed `No tools found`. In the model profile disable Builtin Tools, set Function Calling = Native, enable the bridge and start a fresh chat. Confirm the four functions appear. Do not assume a model's text saying it has no tools is proof of a network failure; inspect the tool invocation list and backend behavior.
+Utilisez l'**outil Python de l'espace de travail (Workspace Tool)** fourni dans `openwebui/tools/owasp_report_bridge.py`. Cette solution a été validée dans notre laboratoire, alors qu'une connexion externe de type OpenAPI affichait `No tools found`. Dans le profil du modèle, désactivez **Builtin Tools**, choisissez **Function Calling = Native**, activez le pont et démarrez une nouvelle conversation. Confirmez que les quatre fonctions apparaissent. Le simple fait que le modèle affirme ne pas avoir d'outils ne prouve pas une panne réseau : vérifiez la liste des appels réellement exécutés et le comportement du backend.
 
-## Direct knowledge attachment causes tool skipping
+## L'ajout automatique de connaissances empêche les appels d'outils
 
-Our Qwen3.5 9B sometimes answered from retrieved knowledge (e.g., 11 sources) instead of invoking FastAPI tools. Test custom tools with no auto-attached knowledge base, then explicitly call `search_owasp_knowledge`. If a different model works with automatic RAG and tools, you may enable that mode after validation.
+Dans nos essais, Qwen3.5 9B a parfois répondu directement à partir des documents récupérés (par exemple, 11 sources) sans appeler les outils FastAPI. Testez d'abord les outils personnalisés sans base de connaissances jointe automatiquement, puis appelez explicitement `search_owasp_knowledge`. Si un autre modèle gère correctement le RAG automatique et les outils, vous pourrez réactiver ce mode après validation.
 
-## ZAP shows Webswing but API is closed
+## ZAP affiche Webswing, mais son API ferme la connexion
 
-Port 8080 inside the container is Webswing, published as port 8088. It is not the API. Port 8090 is ZAP's API/proxy, but must first be initialized by opening `/zap` in the browser. The previous environment returned `RemoteDisconnected` from port 8090, even inside the ZAP container; this was **not solved**. Check Tools → Options → API (API key and allowed addresses), Network → Local Servers/Proxies (address and API/proxy mode), and ZAP logs. `./scripts/check_zap_api.sh` provides a version-only authenticated probe. Do not publish port 8090 or disable API authentication as a workaround.
+Le port 8080 du conteneur sert Webswing et est publié sur le port 8088 de l'hôte. **Ce n'est pas le port de l'API.** Le port 8090 héberge l'API/le proxy de ZAP, mais ZAP doit d'abord être initialisé en ouvrant `/zap` dans le navigateur. Dans l'ancien environnement, le port 8090 renvoyait `RemoteDisconnected`, même depuis l'intérieur du conteneur ZAP : ce problème **n'a pas été résolu**. Vérifiez **Tools → Options → API** (clé API et adresses autorisées), **Network → Local Servers/Proxies** (adresse d'écoute et mode API/proxy), ainsi que les journaux de ZAP. `./scripts/check_zap_api.sh` permet d'interroger la version avec authentification, en lecture seule. Ne publiez pas le port 8090 et ne désactivez pas l'authentification API pour contourner le problème.
 
-## Report import and permissions
+## Importation des rapports et permissions
 
-Saved reports should have a top-level ZAP `site` array. Use:
+Les rapports enregistrés doivent contenir un tableau `site` au premier niveau. Utilisez :
 
 ```bash
 python3 scripts/import_zap_report.py /path/to/report.json
 python3 scripts/summarize_zap_report.py
 ```
 
-If the ZAP Report dialogue saves `report.html`, also export a separate `report.json`; the FastAPI parser does not parse HTML or PDF. The ZAP container saves to `/zap/wrk/reports`, host folder `data/reports`. FastAPI's `/reports` is read-only. If files seem invisible, check host folder ownership and `docker compose exec security-agent ls -l /reports` (if `ls` is available; its Python image is slim).
+Si la fenêtre de génération de rapport ZAP produit `report.html`, exportez également un fichier distinct `report.json` : le parseur FastAPI ne sait pas lire les formats HTML ou PDF. ZAP enregistre les rapports dans `/zap/wrk/reports`, ce qui correspond au dossier hôte `data/reports`. Le répertoire `/reports` monté dans FastAPI est en lecture seule. Si les fichiers n'apparaissent pas, vérifiez les permissions du dossier hôte et `docker compose exec security-agent ls -l /reports` (si `ls` est disponible ; l'image Python utilisée est minimale).
 
-## Knowledge import issues
+## Problèmes d'importation des connaissances
 
-- API token must be from the intended Open WebUI account; don't paste it publicly.
-- A **Knowledge ID** is distinct from a file ID or model ID.
-- File processing is asynchronous: the loader polls for `completed` before calling `file/add`.
-- If you get a duplicate content error, it can mean the content was already indexed. Do not blindly `--force` in a loop.
-- If `check_chroma.py` reports no configured collection, edit `.env` `KNOWLEDGE_ID` and recreate **open-webui** only (`docker compose up -d --no-deps --force-recreate open-webui`).
-- If changing the embedding model, re-embed/reindex documents in a new collection; matching dimensions by themselves do not prove embedding space compatibility.
-- Large imports can take several minutes because Ollama runs on a different machine.
+- La clé API doit provenir du compte Open WebUI prévu pour l'opération ; ne la partagez jamais publiquement.
+- Un **identifiant de base de connaissances (Knowledge ID)** est distinct d'un identifiant de fichier ou de modèle.
+- Le traitement des fichiers est asynchrone : le script attend l'état `completed` avant d'appeler `file/add`.
+- Une erreur de contenu dupliqué peut signifier que le document est déjà indexé. Évitez d'exécuter `--force` en boucle sans diagnostic.
+- Si `check_chroma.py` n'identifie aucune collection configurée, corrigez `KNOWLEDGE_ID` dans `.env`, puis recréez **uniquement Open WebUI** avec `docker compose up -d --no-deps --force-recreate open-webui`.
+- Si vous changez de modèle d'embedding, recalculez les vecteurs et réindexez les documents dans une nouvelle collection. Des dimensions identiques ne garantissent pas que les vecteurs appartiennent au même espace sémantique.
+- Les importations volumineuses peuvent durer plusieurs minutes, car Ollama est exécuté sur une autre machine.
 
-## Backups and upgrades
+## Sauvegardes et mises à niveau
 
-Use `./scripts/backup.sh --yes` for an offline filesystem snapshot (stack stopped during tar). It includes `.env`, account data, Chroma and MariaDB files, reports and ZAP CA keys. Secure or encrypt that archive. `docker compose pull && docker compose up -d --build` is appropriate only after reading release notes and taking a backup. Preserve `.env` stable keys to retain Open WebUI sessions and DB credentials. Do **not** run `docker compose down -v` unless intentionally destroying data.
+Utilisez `./scripts/backup.sh --yes` pour une copie cohérente des données hors ligne (le stack est arrêté pendant la création de l'archive). La sauvegarde contient `.env`, les données des comptes, ChromaDB et MariaDB, les rapports et les clés de l'autorité de certification ZAP. Sécurisez ou chiffrez cette archive. N'exécutez `docker compose pull && docker compose up -d --build` qu'après avoir lu les notes de version et créé une sauvegarde. Conservez les valeurs stables de `.env` pour préserver les sessions Open WebUI et les identifiants de base de données. **N'exécutez pas** `docker compose down -v`, sauf si vous souhaitez détruire volontairement les données.
 
-## Other useful inspections
+## Autres commandes de diagnostic
 
 ```bash
 docker compose config --quiet

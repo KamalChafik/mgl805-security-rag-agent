@@ -1,26 +1,26 @@
-# Architecture — MGL805 Security Lab
+# Architecture — Laboratoire de sécurité MGL805
 
-## What runs where
+## Répartition des composants
 
-The Linux VM hosts Open WebUI, ChromaDB, FastAPI, ZAP Webswing, DVWA and MariaDB in one Docker Compose project. Ollama (Qwen3.5:9b and Qwen3 Embedding 0.6b) continues to run on the Windows PC with RTX 3060 12 GB. This is by design: a single **Compose project** does not imply that every component is colocated physically.
+La VM Linux héberge Open WebUI, ChromaDB, FastAPI, ZAP Webswing, DVWA et MariaDB dans un seul projet Docker Compose. Ollama (`qwen3.5:9b` et `qwen3-embedding:0.6b`) continue de fonctionner sur le PC Windows équipé d'une RTX 3060 de 12 Go. Ce choix est volontaire : utiliser **un seul projet Compose** ne signifie pas que tous les composants doivent être exécutés sur la même machine physique.
 
-## Two distinct paths
+## Deux flux distincts
 
-**Knowledge ingestion (managed by Open WebUI):** Official OWASP files → `scripts/load_knowledge.py` using Open WebUI API → Open WebUI file processing/chunking → Ollama embeddings → Open WebUI writes vectors + chunks + metadata to ChromaDB. The loader does not bypass Open WebUI.
+**Ingestion des connaissances (gérée par Open WebUI) :** fichiers officiels OWASP → `scripts/load_knowledge.py`, au moyen de l'API d'Open WebUI → traitement et découpage des fichiers par Open WebUI → calcul des embeddings par Ollama → écriture des vecteurs, des fragments de texte et des métadonnées dans ChromaDB par Open WebUI. Le script de chargement ne contourne pas Open WebUI.
 
-**Agent runtime (explicit tool calls):** User → Open WebUI/Qwen → `OWASP Report Bridge`. The bridge reads FastAPI ZAP findings using HTTP, and retrieves OWASP chunks by calling Ollama embeddings then querying the existing Chroma collection. The model correlates the two. For this setup, don't attach a huge automatic Knowledge context at the same time you are testing tool calls.
+**Exécution de l'agent (appels d'outils explicites) :** utilisateur → Open WebUI/Qwen → `OWASP Report Bridge`. Le pont lit les constats ZAP dans FastAPI par HTTP et récupère les fragments OWASP en demandant l'embedding de la requête à Ollama, puis en interrogeant la collection ChromaDB existante. Le modèle met ensuite les deux sources en relation. Pour cette configuration, évitez de joindre automatiquement un contexte documentaire volumineux lorsque vous testez les appels d'outils.
 
-## Docker isolation
+## Isolation Docker
 
-- `backend`: Open WebUI, ChromaDB, FastAPI. Open WebUI and the bridge can call the external Windows Ollama URL. No host-published Chroma/FastAPI port.
-- `lab` (internal): ZAP, DVWA, FastAPI, intentionally isolated from external destinations. ZAP/agent reach DVWA as `http://dvwa:80/`.
-- `dbnet` (internal): DVWA and MariaDB only. MariaDB must not be visible to ZAP or other app containers.
+- `backend` : Open WebUI, ChromaDB et FastAPI. Open WebUI et le pont peuvent communiquer avec l'API Ollama externe sur Windows. Aucun port de ChromaDB ni de FastAPI n'est publié sur l'hôte.
+- `lab` (interne) : ZAP, DVWA et FastAPI, isolés volontairement des destinations externes. ZAP et l'agent accèdent à DVWA par `http://dvwa:80/`.
+- `dbnet` (interne) : DVWA et MariaDB uniquement. MariaDB ne doit pas être accessible à ZAP ni aux autres conteneurs applicatifs.
 
-ZAP's Webswing GUI is published on host port 8088; its control/proxy port 8090 remains internal. ZAP root CA keys live under `data/zap/`. FastAPI only sees `data/reports/` read-only.
+L'interface Webswing de ZAP est publiée sur le port 8088 de l'hôte. Le port interne 8090, utilisé par le proxy et l'API de contrôle, n'est pas publié. Les clés de l'autorité de certification racine de ZAP se trouvent sous `data/zap/`. FastAPI accède à `data/reports/` uniquement en lecture.
 
-## Limitations
+## Limites actuelles
 
-- The lab target is DVWA, not your colleague's remote Juice Shop environment.
-- No scan-launch API function exists. Adding one will require a scoped, authenticated security boundary and explicit user approval for intrusive scans.
-- The exact Chroma collection UUID is generated at knowledge-base creation. The source material may produce more or fewer than 161 chunks depending on settings.
-- The host-side `.env` values may not override UI settings already persisted by Open WebUI. Verify the actual admin configuration.
+- La cible du laboratoire est DVWA, et non l'environnement distant Juice Shop d'un collègue.
+- Aucune fonction API ne permet encore de lancer un scan. Son ajout nécessitera des contrôles d'autorisation, un périmètre de cibles strict et une approbation explicite avant tout test intrusif.
+- L'UUID exact de la collection ChromaDB est créé lors de la création de la base de connaissances. Les documents sources peuvent produire plus ou moins de 161 fragments selon les paramètres de découpage.
+- Les valeurs du fichier `.env` côté hôte ne remplacent pas nécessairement les paramètres déjà enregistrés dans l'interface d'administration d'Open WebUI. Vérifiez la configuration réellement active.

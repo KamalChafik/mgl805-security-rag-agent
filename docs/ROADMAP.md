@@ -1,18 +1,18 @@
-# Roadmap / feature boundaries
+# Feuille de route et périmètre fonctionnel
 
-## Already implemented here
+## Fonctionnalités déjà présentes dans cette version
 
-- One Docker Compose project: Open WebUI, ChromaDB, Security Agent, ZAP Webswing, DVWA, MariaDB.
-- Windows Ollama connectivity configured via `.env` (external dependency, not launched by Compose).
-- Manual Open WebUI Python Workspace Tool with four functions.
-- Official OWASP Top 10:2025 fetch script; authenticated Open WebUI API ingestion; local SHA256 state; Chroma inspection and semantic retrieval checks.
-- Read-only FastAPI report API and utility scripts for report import, summaries, tests, health, backups.
+- Un seul projet Docker Compose réunissant Open WebUI, ChromaDB, Security Agent, ZAP Webswing, DVWA et MariaDB.
+- Connexion à Ollama sur Windows configurée par `.env` : il s'agit d'une dépendance externe, non démarrée par Compose.
+- Outil Python natif pour l'espace de travail Open WebUI, à installer manuellement, avec quatre fonctions.
+- Script de téléchargement des documents officiels OWASP Top 10:2025 ; ingestion authentifiée par l'API d'Open WebUI ; suivi local SHA-256 ; scripts d'inspection ChromaDB et de vérification de la recherche sémantique.
+- API FastAPI en lecture seule pour les rapports ZAP et scripts utilitaires pour l'importation de rapports, les résumés, les tests, les vérifications de santé et les sauvegardes.
 
-## Future milestones (NOT in this version)
+## Prochaines étapes (NON implémentées dans cette version)
 
-1. Resolve ZAP Webswing port 8090 API access; securely authenticate using a vault/secret and restrict clients. Add a read-only API status tool first.
-2. Design scan job orchestration with explicit target allowlist, user approval, limits, progress tracking, cancellation, strict timeouts and saved artifacts. Passive-first; active scans require explicit consent.
-3. Add Nuclei as a separate, constrained engine with template allowlists and output normalization; no arbitrary template execution exposed to the LLM.
-4. Support a colleague's remote WireGuard VLAN with narrow routing and permitted HTTP target only. Revalidate that Docker egress reaches target without bridging VLANs broadly.
-5. Incremental CVE intelligence collector from NVD, CISA KEV, FIRST EPSS, with structured ID lookup, deduplication, provenance and scheduled updates. Use a separate Chroma collection from the OWASP KB, and relational storage for authoritative version matching.
-6. Correlate scanner findings, OWASP, CWE and real CVE/version evidence; generate reviewable PDF/JSON reports with observed vs inferred vs confirmed findings clearly separated.
+1. **Rétablir l'accès à l'API ZAP sur le port 8090 :** authentifier les appels avec une clé stockée de manière sécurisée et restreindre les clients autorisés. Commencer par ajouter un outil de lecture seule pour l'état de l'API.
+2. **Orchestrer les scans :** définir une liste explicite de cibles autorisées, l'approbation de l'utilisateur, les limites de trafic, le suivi d'avancement, l'annulation, des délais d'expiration stricts et la sauvegarde des résultats. Commencer par des analyses non intrusives ; les scans actifs exigent un consentement explicite.
+3. **Intégrer Nuclei :** ajouter un moteur distinct et restreint, avec une liste de templates autorisés et une normalisation des résultats. Le LLM ne doit pas pouvoir exécuter librement des templates arbitraires.
+4. **Prendre en charge un VLAN distant via WireGuard :** limiter le routage aux services HTTP explicitement autorisés et vérifier que le trafic sortant des conteneurs Docker atteint les cibles sans interconnecter largement les VLAN.
+5. **Collecter les renseignements CVE :** synchroniser de façon incrémentale NVD, CISA KEV et FIRST EPSS, avec recherche exacte par identifiant, dédoublonnage, traçabilité des sources et mises à jour planifiées. Utiliser une collection ChromaDB distincte de la base OWASP et conserver les correspondances précises de versions dans un stockage relationnel.
+6. **Corréler et produire des rapports :** relier les constats des scanners à OWASP, aux CWE et aux preuves réelles concernant les CVE et les versions. Générer des rapports PDF/JSON révisables en distinguant clairement les faits observés, les hypothèses et les vulnérabilités confirmées.

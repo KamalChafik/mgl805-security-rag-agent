@@ -1,10 +1,3 @@
-"""
-title: OWASP Report Bridge
-author: Local Security Lab
-version: 0.3.1
-description: Read saved ZAP findings and search the OWASP knowledge collection.
-"""
-
 import asyncio
 import json
 import os
